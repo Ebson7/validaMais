@@ -8,7 +8,7 @@ import { useApp } from '../../context/AppContext';
 import { Package, ShoppingBag, Clock, CheckSquare, PlusCircle, ClipboardList, TrendingUp } from 'lucide-react';
 
 export const AdminDashboardValida: React.FC = () => {
-  const { user, navigateTo, produtos, reservas: allReservas, produtosLoading, reservasLoadingPre } = useApp();
+  const { user, navigateTo, produtos, reservas: allReservas, produtosLoading, reservasLoadingPre, clearAllDatabaseUsers } = useApp();
 
   // 1. Get products registered by this specific merchant admin
   const myProducts = produtos.filter(p => p.criadorId === user?.uid);
@@ -159,6 +159,31 @@ export const AdminDashboardValida: React.FC = () => {
             Consulte as solicitações de reserva feitas por usuários, identifique os clientes que virão retirar o mantimento e dê baixa para confirmar a retirada.
           </p>
         </button>
+      </div>
+
+      {/* Database control panel */}
+      <div className="glass rounded-3xl border-red-200/60 p-6 bg-red-50/10 mt-2 border">
+        <h3 className="font-extrabold text-sm text-red-900 flex items-center gap-2">
+          <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
+          Manutenção do Sistema (Limpeza & Reinicialização)
+        </h3>
+        <p className="text-xs text-gray-500 mt-2 max-w-2xl leading-relaxed">
+          Para realizar testes limpos a partir do zero, use a ferramenta de reinicialização abaixo. 
+          Ela removerá todas as contas de usuário adicionais da base remota, cancelará e apagará todas as reservas experimentais, 
+          e restabelecerá o catálogo promovido original com as contas de modelo padrão (<span className="font-semibold text-amber-700">admin@validamais.com</span> e <span className="font-semibold text-emerald-700">cliente@validamais.com</span>).
+        </p>
+        <div className="mt-4">
+          <button
+            onClick={() => {
+              if (window.confirm("Deseja realmente limpar toda a base de dados de usuários personalizados, reservas antigas e produtos extras? Essa operação não pode ser desfeita.")) {
+                clearAllDatabaseUsers();
+              }
+            }}
+            className="px-4 py-2 bg-red-650 bg-red-600 hover:bg-red-750 transition-all text-white text-xs font-bold font-mono uppercase tracking-wider rounded-xl cursor-pointer"
+          >
+            Limpar Base e Começar do Zero
+          </button>
+        </div>
       </div>
     </div>
   );

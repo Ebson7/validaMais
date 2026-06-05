@@ -11,7 +11,7 @@ import {
   signOut,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, collection } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { createOrUpdateUserDocument, getUserProfile, loginSimulatedUser } from '../lib/auth';
 import { Usuario, UserRole, Produto, Reserva } from '../types';
@@ -69,6 +69,7 @@ interface AppContextType {
   cancelReservation: (reservaId: string) => Promise<void>;
   updateReservationStatus: (reservaId: string, status: 'retirado' | 'cancelado') => Promise<void>;
   seedProducts: () => Promise<void>;
+  clearAllDatabaseUsers: () => Promise<void>;
 }
 
 const DEFAULT_USERS: Usuario[] = [
@@ -585,6 +586,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const clearAllDatabaseUsers = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      // 1. Reset LocalStorage
+      localStorage.setItem('validamais_usuarios', JSON.stringify(DEFAULT_USERS));
+      localStorage.setItem('validamais_reservas', JSON.stringify([]));
+
+      // 2. Clear ALL user documents from Firestore *except* default models
+      const defaultUids = [
+        'sim_cliente_validamais_com',
+        'sim_admin_validamais_com',
+        'mock_userId_cliente1',
+        'mock_userId_admin1'
+      ];
+
+      const usuariosSnap = await getDocs(collection(db, 'usuarios'));
+      const userDeletes: Promise<void>[] = [];
+      usuariosSnap.forEach((docSnap) => {
+        if (!defaultUids.includes(docSnap.id)) {
+          userDeletes.push(deleteDoc(doc(db, 'usuarios', docSnap.id)));
+        }
+      });
+      if (userDeletes.length > 0) {
+        await Promise.all(userDeletes);
+      }
+
+      // 3. Delete ALL reservations from Firestore
+      const reservasSnap = await getDocs(collection(db, 'reservas'));
+      const reservaDeletes: Promise<void>[] = [];
+      reservasSnap.forEach((docSnap) => {
+        reservaDeletes.push(deleteDoc(doc(db, 'reservas', docSnap.id)));
+      });
+      if (reservaDeletes.length > 0) {
+        await Promise.all(reservaDeletes);
+      }
+
+      // 4. Delete ALL products and seed defaults
+      const produtosSnap = await getDocs(collection(db, 'produtos'));
+      const productDeletes: Promise<void>[] = [];
+      produtosSnap.forEach((docSnap) => {
+        productDeletes.push(deleteDoc(doc(db, 'produtos', docSnap.id)));
+      });
+      if (productDeletes.length > 0) {
+        await Promise.all(productDeletes);
+      }
+
+      const creatorId = user?.uid || 'mock_userId_admin1';
+      await seedDefaultProducts(creatorId);
+
+      // 5. Check if we should logout
+      if (user && !defaultUids.includes(user.uid)) {
+        setUser(null);
+        localStorage.removeItem('validamais_currentUser');
+        navigateTo('home');
+        showAlert('Todos os dados foram reiniciados do zero! Faça login com uma conta padrão.', 'success');
+      } else {
+        showAlert('Base de dados limpa com sucesso! Somente dados de modelo/padrão mantidos.', 'success');
+      }
+    } catch (err: any) {
+      console.error("Erro ao redefinir base de dados:", err);
+      showAlert('Não foi possível realizar a limpeza remota completa.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -609,7 +676,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createReservation,
         cancelReservation,
         updateReservationStatus,
-        seedProducts
+        seedProducts,
+        clearAllDatabaseUsers
       }}
     >
       {children}
