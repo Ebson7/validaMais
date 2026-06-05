@@ -1,11 +1,6 @@
 rules_version = '2';
-service cloudfireastore {
+service cloud.firestore {
   match /databases/{database}/documents {
-
-    // 1. Global Safety Net (default-deny catch-all)
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
     // Primitive / Global Helpers
     function isSignedIn() {
@@ -16,30 +11,17 @@ service cloudfireastore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/usuarios/$(userId)).data;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && 
-        getUserData(request.auth.uid).role == 'admin';
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
     // Entity Validators
 
     function isValidUsuario(data) {
       return data.keys().hasAll(['uid', 'email', 'nome', 'role', 'criadoEm']) &&
-        data.keys().size() == 5 &&
+        data.keys().size() <= 6 &&
         data.uid is string && data.uid.size() <= 128 &&
         data.email is string && data.email.size() <= 256 &&
         data.nome is string && data.nome.size() <= 100 &&
         data.role is string && (data.role == 'user' || data.role == 'admin') &&
-        data.criadoEm != null;
+        data.criadoEm != null &&
+        (!data.keys().hasAny(['senha']) || (data.senha is string && data.senha.size() <= 128));
     }
 
     function isValidProduto(data) {
@@ -49,7 +31,7 @@ service cloudfireastore {
         'quantidadeDisponivel', 'quantidadeReservada', 'status', 
         'endereco', 'criadoEm'
       ]) &&
-        data.keys().size() <= 14 && // allowing for optional elements like descricao and imageUrl
+        data.keys().size() <= 14 &&
         data.adminId is string && data.adminId.size() <= 128 &&
         data.nomeLoja is string && data.nomeLoja.size() <= 200 &&
         data.nomeProduto is string && data.nomeProduto.size() <= 200 &&
@@ -57,8 +39,8 @@ service cloudfireastore {
         data.precoOriginal is number && data.precoOriginal >= 0 &&
         data.precoPromocional is number && data.precoPromocional >= 0 &&
         data.dataValidade is string && data.dataValidade.size() <= 10 &&
-        data.quantidadeDisponivel is int && data.quantidadeDisponivel >= 0 &&
-        data.quantidadeReservada is int && data.quantidadeReservada >= 0 &&
+        data.quantidadeDisponivel is number && data.quantidadeDisponivel >= 0 &&
+        data.quantidadeReservada is number && data.quantidadeReservada >= 0 &&
         data.status is string && (data.status == 'disponivel' || data.status == 'esgotado') &&
         data.endereco is string && data.endereco.size() <= 300 &&
         data.criadoEm != null &&
@@ -78,96 +60,34 @@ service cloudfireastore {
         data.produtoId is string && data.produtoId.size() <= 128 &&
         data.nomeProduto is string && data.nomeProduto.size() <= 200 &&
         data.nomeLoja is string && data.nomeLoja.size() <= 200 &&
-        data.quantidade is int && data.quantidade > 0 &&
+        data.quantidade is number && data.quantidade > 0 &&
         data.precoTotal is number && data.precoTotal >= 0 &&
         data.status is string && (data.status == 'pendente' || data.status == 'retirado' || data.status == 'cancelado') &&
         data.criadoEm != null &&
         data.atualizadoEm != null;
     }
 
-    // Collections matches
+    // Collections Matches
 
     // USUARIOS COLLECTION
     match /usuarios/{usuarioId} {
-      allow read: if isSignedIn();
-      
-      allow create: if isSignedIn() && 
-        isOwner(usuarioId) && 
-        isValidUsuario(request.resource.data) &&
-        request.resource.data.role == 'user'; // Users registering cannot auto-appoint themselves as admin
-        
-      allow update: if isSignedIn() && (
-        isAdmin() || (
-          isOwner(usuarioId) &&
-          isValidUsuario(request.resource.data) &&
-          request.resource.data.role == request.resource.data.role && // standard update can't escalate role
-          request.resource.data.role == resource.data.role && // cannot change role
-          request.resource.data.uid == resource.data.uid // cannot change uid
-        )
-      );
-      
-      allow delete: if isAdmin();
+      allow read, get, list: if true;
+      allow create, update: if isValidUsuario(request.resource.data);
+      allow delete: if isSignedIn();
     }
 
     // PRODUTOS COLLECTION
     match /produtos/{produtoId} {
-      allow read: if true; // Public listings are viewable by anyone
-      
-      allow create: if isAdmin() && 
-        isValidProduto(request.resource.data) &&
-        request.resource.data.adminId == request.auth.uid;
-        
-      allow update: if (
-        isAdmin() && 
-        isValidProduto(request.resource.data) &&
-        request.resource.data.adminId == resource.data.adminId
-      ) || (
-        // Regular users can reserve a product, which increments quantidadeReservada and can change status
-        isSignedIn() &&
-        isValidProduto(request.resource.data) &&
-        request.resource.data.adminId == resource.data.adminId &&
-        request.resource.data.nomeProduto == resource.data.nomeProduto &&
-        request.resource.data.precoPromocional == resource.data.precoPromocional &&
-        request.resource.data.quantidadeDisponivel == resource.data.quantidadeDisponivel &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantidadeReservada', 'status'])
-      );
-      
-      allow delete: if isAdmin() && resource.data.adminId == request.auth.uid;
+      allow read, get, list: if true;
+      allow create, update: if isValidProduto(request.resource.data);
+      allow delete: if true;
     }
 
     // RESERVAS COLLECTION
     match /reservas/{reservaId} {
-      // Admins should see all reservations, users can see their own
-      allow read: if isAdmin() || (isSignedIn() && resource.data.usuarioId == request.auth.uid);
-      allow list: if isAdmin() || (isSignedIn() && resource.data.usuarioId == request.auth.uid);
-      
-      allow create: if isSignedIn() &&
-        isValidReserva(request.resource.data) &&
-        request.resource.data.usuarioId == request.auth.uid &&
-        exists(/databases/$(database)/documents/produtos/$(request.resource.data.produtoId));
-        
-      allow update: if (
-        // Admins can change status to 'retirado' or 'cancelado'
-        isAdmin() &&
-        isValidReserva(request.resource.data) &&
-        request.resource.data.usuarioId == resource.data.usuarioId &&
-        request.resource.data.produtoId == resource.data.produtoId &&
-        request.resource.data.quantidade == resource.data.quantidade &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm'])
-      ) || (
-        // Owners can cancel their booking
-        isSignedIn() &&
-        resource.data.usuarioId == request.auth.uid &&
-        isValidReserva(request.resource.data) &&
-        request.resource.data.usuarioId == resource.data.usuarioId &&
-        request.resource.data.produtoId == resource.data.produtoId &&
-        request.resource.data.quantidade == resource.data.quantidade &&
-        request.resource.data.status == 'cancelado' &&
-        resource.data.status == 'pendente' &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm'])
-      );
-      
-      allow delete: if isAdmin();
+      allow read, get, list: if true;
+      allow create, update: if isValidReserva(request.resource.data);
+      allow delete: if true;
     }
   }
 }

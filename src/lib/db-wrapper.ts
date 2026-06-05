@@ -139,9 +139,24 @@ export async function getProducts(): Promise<Produto[]> {
     querySnap.forEach((docSnap) => {
       results.push({ id: docSnap.id, ...docSnap.data() } as Produto);
     });
+    
     if (results.length > 0) {
       saveLocalProducts(results); // Sync cache
       return results;
+    } else {
+      // Database has 0 records - let's auto-seed to Firestore so it persists for everyone
+      console.log("Firestore 'produtos' collection is empty. Auto-seeding default products...");
+      await seedDefaultProducts('mock_userId_admin1');
+      // Fetch fresh products from Firestore
+      const freshSnap = await getDocs(collection(db, 'produtos'));
+      const freshResults: Produto[] = [];
+      freshSnap.forEach((docSnap) => {
+        freshResults.push({ id: docSnap.id, ...docSnap.data() } as Produto);
+      });
+      if (freshResults.length > 0) {
+        saveLocalProducts(freshResults);
+        return freshResults;
+      }
     }
   } catch (error) {
     console.warn("Firestore error in getProducts, falling back to localStorage:", error);
@@ -158,9 +173,7 @@ export async function getStoreProducts(adminId: string): Promise<Produto[]> {
     querySnap.forEach((docSnap) => {
       results.push({ id: docSnap.id, ...docSnap.data() } as Produto);
     });
-    if (results.length > 0) {
-      return results;
-    }
+    return results;
   } catch (error) {
     console.warn("Firestore error in getStoreProducts, using localStorage fallback:", error);
   }
@@ -283,10 +296,8 @@ export async function getReservations(usuarioId?: string): Promise<Reserva[]> {
     querySnap.forEach((docSnap) => {
       results.push({ id: docSnap.id, ...docSnap.data() } as Reserva);
     });
-    if (results.length > 0) {
-      saveLocalReservations(results);
-      return results;
-    }
+    saveLocalReservations(results);
+    return results;
   } catch (error) {
     console.warn("Firestore error in getReservations, fallback to localStorage:", error);
   }

@@ -19,9 +19,9 @@ import { Usuario, UserRole } from '../types';
 /**
  * Creates/Updates user document in Firestore post-authentication.
  */
-export async function createOrUpdateUserDocument(uid: string, email: string, nome: string, role: UserRole): Promise<Usuario> {
+export async function createOrUpdateUserDocument(uid: string, email: string, nome: string, role: UserRole, senha?: string): Promise<Usuario> {
   const userRef = doc(db, 'usuarios', uid);
-  const userDoc: Usuario = {
+  const userDoc: any = {
     uid,
     email,
     nome,
@@ -29,9 +29,13 @@ export async function createOrUpdateUserDocument(uid: string, email: string, nom
     criadoEm: serverTimestamp()
   };
 
+  if (senha) {
+    userDoc.senha = senha;
+  }
+
   try {
     await setDoc(userRef, userDoc);
-    return userDoc;
+    return { ...userDoc, criadoEm: new Date().toISOString() } as Usuario;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `usuarios/${uid}`);
     throw error;
@@ -54,3 +58,24 @@ export async function getUserProfile(uid: string): Promise<Usuario | null> {
     throw error;
   }
 }
+
+/**
+ * Verifies simulated credentials saved in Firestore across multiple browsers.
+ */
+export async function loginSimulatedUser(email: string, pass: string): Promise<Usuario> {
+  const emailLower = email.trim().toLowerCase();
+  const simulatedUid = 'sim_' + emailLower.replace(/[^a-zA-Z0-9]/g, '_');
+  
+  const profile = await getUserProfile(simulatedUid);
+  if (!profile) {
+    throw new Error('Usuário não localizado no banco.');
+  }
+
+  const cachedProfile = profile as any;
+  if (cachedProfile.senha && cachedProfile.senha !== pass) {
+    throw new Error('E-mail ou senha incorretos.');
+  }
+
+  return profile;
+}
+
