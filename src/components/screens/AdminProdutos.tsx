@@ -13,7 +13,7 @@ export const AdminProdutosValida: React.FC = () => {
   const { user, navigateTo, currentScreen, selectedProductId, showAlert, produtos, produtosLoading: loading, saveProduct, deleteProduct } = useApp();
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
 
-  const products = produtos.filter(p => p.criadorId === user?.uid);
+  const products = produtos.filter(p => p.adminId === user?.uid);
 
   // Load product to edit if editing scale is selected
   useEffect(() => {

@@ -98,7 +98,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('validamais_currentUser');
     return saved ? JSON.parse(saved) : null;
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const saved = localStorage.getItem('validamais_currentUser');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.uid) {
+          return false; // Instant load if user session already exists in cache
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('home');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [alert, setAlertState] = useState<Alert | null>(null);
@@ -292,10 +303,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLoading(false);
     });
 
-    // 2. Guaranteed Boot Fallback: sets loading to false anyway after 1800ms
+    // 2. Guaranteed Boot Fallback: sets loading to false anyway after 300ms (optimized for snappy boot)
     const fallbackTimer = setTimeout(() => {
       setLoading(false);
-    }, 1800);
+    }, 300);
 
     return () => {
       unsubscribe();
@@ -378,51 +389,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 4. Fallback: Auto-create simulated user if not found at all, and persist it to Firestore & LocalStorage
-    try {
-      const autoRole: UserRole = (emailLower.includes('admin') || emailLower.includes('lojista') || emailLower.includes('comerciante')) ? 'admin' : 'user';
-      const autoName = emailLower.split('@')[0].replace(/[^a-zA-Z]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Consumidor';
-      const simulatedUid = 'sim_' + emailLower.replace(/[^a-zA-Z0-9]/g, '_');
-      
-      let newProfile: Usuario;
-      try {
-        newProfile = await createOrUpdateUserDocument(simulatedUid, emailLower, autoName, autoRole, password);
-      } catch (dbErr) {
-        console.warn("Firestore write failed for simulated user, creating purely local user document instead:", dbErr);
-        newProfile = {
-          uid: simulatedUid,
-          email: emailLower,
-          nome: autoName,
-          role: autoRole,
-          criadoEm: new Date().toISOString()
-        };
-      }
-
-      // Add to local list
-      const localUsersStr = localStorage.getItem('validamais_usuarios');
-      const localUsers: Usuario[] = localUsersStr ? JSON.parse(localUsersStr) : [...DEFAULT_USERS];
-      if (!localUsers.some(u => u.uid === newProfile.uid)) {
-        localUsers.push({
-          ...newProfile,
-          senha: password
-        } as any);
-        localStorage.setItem('validamais_usuarios', JSON.stringify(localUsers));
-      }
-
-      setUser(newProfile);
-      localStorage.setItem('validamais_currentUser', JSON.stringify(newProfile));
-      showAlert(`Bem-vindo, ${newProfile.nome}! (Conta simulada criada com sucesso)`, 'success');
-      if (newProfile.role === 'admin') {
-        navigateTo('admin-dashboard');
-      } else {
-        navigateTo('home');
-      }
-    } catch (err: any) {
-      console.error("Critical identity setup exception:", err);
-      showAlert('Erro ao processar autenticação.', 'error');
-    } finally {
-      setLoading(false);
-    }
+    // 4. Deny access for non-existent users - explicit registration required
+    showAlert('Usuário não cadastrado. Por favor, cadastre-se para acessar o sistema.', 'error');
+    setLoading(false);
+    throw new Error('Usuário não cadastrado.');
   };
 
   // Register handler

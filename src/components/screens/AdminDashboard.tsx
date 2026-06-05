@@ -11,7 +11,7 @@ export const AdminDashboardValida: React.FC = () => {
   const { user, navigateTo, produtos, reservas: allReservas, produtosLoading, reservasLoadingPre, clearAllDatabaseUsers } = useApp();
 
   // 1. Get products registered by this specific merchant admin
-  const myProducts = produtos.filter(p => p.criadorId === user?.uid);
+  const myProducts = produtos.filter(p => p.adminId === user?.uid);
 
   // 2. Scan reservations
   let pending = 0;
