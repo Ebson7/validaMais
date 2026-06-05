@@ -1,0 +1,103 @@
+{
+  "entities": {
+    "Produto": {
+      "title": "Produto",
+      "description": "Produto próximo da validade cadastrado por um admin (lojista)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "adminId": { "type": "string" },
+        "nomeLoja": { "type": "string" },
+        "nomeProduto": { "type": "string" },
+        "categoria": { "type": "string" },
+        "descricao": { "type": "string" },
+        "precoOriginal": { "type": "number" },
+        "precoPromocional": { "type": "number" },
+        "dataValidade": { "type": "string", "format": "date" },
+        "quantidadeDisponivel": { "type": "number" },
+        "quantidadeReservada": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "status": { "type": "string", "enum": [ "disponivel", "esgotado" ] },
+        "endereco": { "type": "string" },
+        "criadoEm": { "type": "object" }
+      },
+      "required": [
+        "adminId",
+        "nomeLoja",
+        "nomeProduto",
+        "categoria",
+        "precoOriginal",
+        "precoPromocional",
+        "dataValidade",
+        "quantidadeDisponivel",
+        "quantidadeReservada",
+        "status",
+        "endereco",
+        "criadoEm"
+      ]
+    },
+    "Reserva": {
+      "title": "Reserva",
+      "description": "Reserva de produto feita por um consumidor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "usuarioId": { "type": "string" },
+        "usuarioEmail": { "type": "string" },
+        "produtoId": { "type": "string" },
+        "nomeProduto": { "type": "string" },
+        "nomeLoja": { "type": "string" },
+        "quantidade": { "type": "number" },
+        "precoTotal": { "type": "number" },
+        "status": { "type": "string", "enum": [ "pendente", "retirado", "cancelado" ] },
+        "criadoEm": { "type": "object" },
+        "atualizadoEm": { "type": "object" }
+      },
+      "required": [
+        "usuarioId",
+        "usuarioEmail",
+        "produtoId",
+        "nomeProduto",
+        "nomeLoja",
+        "quantidade",
+        "precoTotal",
+        "status",
+        "criadoEm",
+        "atualizadoEm"
+      ]
+    },
+    "Usuario": {
+      "title": "Usuario",
+      "description": "Perfil de usuário da plataforma com suas permissões",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "nome": { "type": "string" },
+        "role": { "type": "string", "enum": [ "user", "admin" ] },
+        "criadoEm": { "type": "object" }
+      },
+      "required": [
+        "uid",
+        "email",
+        "nome",
+        "role",
+        "criadoEm"
+      ]
+    }
+  },
+  "firestore": {
+    "produtos/{produtoId}": {
+      "schema": "Produto",
+      "description": "Produtos cadastrados para venda rápida"
+    },
+    "reservas/{reservaId}": {
+      "schema": "Reserva",
+      "description": "Reservas de produtos feitas por usuários"
+    },
+    "usuarios/{usuarioId}": {
+      "schema": "Usuario",
+      "description": "Dados do perfil de usuários com controle de perfil (roles)"
+    }
+  }
+}

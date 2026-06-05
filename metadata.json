@@ -1,0 +1,6 @@
+{
+  "name": "ValidaMais",
+  "description": "Plataforma B2C que conecta pequenos mercados a consumidores para oferecer produtos próximos da validade com desconto.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
