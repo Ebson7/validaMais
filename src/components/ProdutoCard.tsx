@@ -13,11 +13,19 @@ interface ProdutoCardProps {
 }
 
 export const ProdutoCard: React.FC<ProdutoCardProps> = ({ produto }) => {
-  const { navigateTo, user } = useApp();
+  const { navigateTo, user, avaliacoes } = useApp();
 
   const original = produto.precoOriginal;
   const promo = produto.precoPromocional;
   const discountPercent = original > 0 ? Math.round(((original - promo) / original) * 100) : 0;
+
+  const avaliacoesLoja = (avaliacoes || []).filter(
+    a => a.nomeLoja.toLowerCase().trim() === (produto?.nomeLoja || '').toLowerCase().trim()
+  );
+
+  const mediaAvaliacao = avaliacoesLoja.length > 0
+    ? (avaliacoesLoja.reduce((sum, a) => sum + a.estrelas, 0) / avaliacoesLoja.length).toFixed(1)
+    : null;
 
   // Calculo de validade
   const checkExpiryStatus = (dateStr: string) => {
@@ -65,13 +73,17 @@ export const ProdutoCard: React.FC<ProdutoCardProps> = ({ produto }) => {
   };
 
   // Safe image display
-  const finalImageUrl = produto.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=60&w=400';
+  const finalImageUrl = (produto.imagens && produto.imagens.length > 0) 
+    ? produto.imagens[0] 
+    : (produto.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=60&w=400');
 
   return (
     <div
       id={`produto_card_${produto.id}`}
       className={`glass rounded-3xl border-white/45 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex flex-col group ${
         isEsgotado || expiry.isExpired ? 'opacity-85' : ''
+      } ${
+        !isEsgotado && !expiry.isExpired && expiry.days === 0 ? 'ring-2 ring-rose-500/80 hover:ring-rose-600 bg-rose-50/5/10 bg-red-50/10' : ''
       }`}
     >
       {/* Product Image & Badge */}
@@ -94,6 +106,14 @@ export const ProdutoCard: React.FC<ProdutoCardProps> = ({ produto }) => {
         <div className={`absolute top-3 right-3 border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider shadow-xs uppercase font-mono ${expiry.color}`}>
           {expiry.label}
         </div>
+
+        {/* Same-day expiration high urgency banner */}
+        {!isEsgotado && !expiry.isExpired && expiry.days === 0 && (
+          <div className="absolute bottom-0 left-0 right-0 bg-rose-600 text-white text-[10px] font-black tracking-wider uppercase font-mono py-1.5 px-3 flex items-center justify-between shadow-inner animate-pulse">
+            <span className="flex items-center gap-1">🚨 Retirada Urgente</span>
+            <span>Consumir Hoje!</span>
+          </div>
+        )}
 
         {/* Esgotado Overlay */}
         {isEsgotado && (
@@ -119,11 +139,19 @@ export const ProdutoCard: React.FC<ProdutoCardProps> = ({ produto }) => {
         <div>
           {/* Shop and Category Info */}
           <div className="flex items-center justify-between text-xs text-gray-500 mb-2 gap-2">
-            <div className="flex items-center gap-1 font-semibold text-gray-700 truncate">
-              <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="truncate">{produto.nomeLoja}</span>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1 font-semibold text-gray-700 truncate">
+                <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">{produto.nomeLoja}</span>
+              </div>
+              {mediaAvaliacao && (
+                <div className="flex items-center gap-0.5 text-[10px] text-amber-600 font-bold font-mono mt-0.5">
+                  <span>★ {mediaAvaliacao}</span>
+                  <span className="text-gray-400 font-normal font-sans">({avaliacoesLoja.length})</span>
+                </div>
+              )}
             </div>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${getCategoryBadgeColor(produto.categoria)}`}>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 self-start ${getCategoryBadgeColor(produto.categoria)}`}>
               {produto.categoria}
             </span>
           </div>

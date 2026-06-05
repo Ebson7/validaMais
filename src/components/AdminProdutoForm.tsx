@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Produto } from '../types';
-import { Check, ArrowLeft, Image as ImageIcon, Send, Percent, Tag, ShieldAlert } from 'lucide-react';
+import { Check, ArrowLeft, Image as ImageIcon, Send, Percent, Tag, ShieldAlert, Trash2, Camera, UploadCloud, Info, Sparkles } from 'lucide-react';
 
 interface AdminProdutoFormProps {
   produtoId?: string | null;
@@ -52,10 +52,15 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
   onSubmit,
   onCancel
 }) => {
-  const { user } = useApp();
+  const { user, categorias, navigateTo } = useApp();
 
   const [nomeProduto, setNomeProduto] = useState('');
-  const [categoria, setCategoria] = useState('Laticínios');
+  const [categoria, setCategoria] = useState(() => {
+    if (initialProduto && initialProduto.categoria) {
+      return initialProduto.categoria;
+    }
+    return 'Laticínios';
+  });
   const [descricao, setDescricao] = useState('');
   const [precoOriginal, setPrecoOriginal] = useState<number | ''>('');
   const [precoPromocional, setPrecoPromocional] = useState<number | ''>('');
@@ -64,7 +69,62 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
   const [endereco, setEndereco] = useState('');
   const [nomeLoja, setNomeLoja] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imagens, setImagens] = useState<string[]>(['', '', '']);
   const [submitting, setSubmitting] = useState(false);
+
+  // CEP Search State inside Admin form
+  const [cepInput, setCepInput] = useState('');
+  const [loadingCep, setLoadingCep] = useState(false);
+
+  const handleCepChange = async (value: string) => {
+    const cleaned = value.replace(/\D/g, '');
+    let formatted = cleaned;
+    if (cleaned.length > 5) {
+      formatted = `${cleaned.substring(0, 5)}-${cleaned.substring(5, 8)}`;
+    }
+    setCepInput(formatted);
+
+    if (cleaned.length === 8) {
+      // Check cache first to avoid slow HTTP requests
+      try {
+        const raw = sessionStorage.getItem('validamais_cep_cache');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed[cleaned] && parsed[cleaned].address) {
+            setEndereco(parsed[cleaned].address);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      setLoadingCep(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`);
+        const data = await response.json();
+        if (data.erro) {
+          alert('CEP não encontrado. Por favor, digite manualmente.');
+        } else {
+          const street = data.logradouro ? `${data.logradouro}` : '';
+          const neighborhood = data.bairro ? ` - ${data.bairro}` : '';
+          const cityState = `, ${data.localidade}/${data.uf}`;
+          const fullAddress = `${street}${neighborhood}${cityState}`;
+          setEndereco(fullAddress);
+
+          // Save to cache
+          try {
+            const raw = sessionStorage.getItem('validamais_cep_cache') || '{}';
+            const parsed = JSON.parse(raw);
+            parsed[cleaned] = { region: data.bairro || data.localidade || '', address: fullAddress };
+            sessionStorage.setItem('validamais_cep_cache', JSON.stringify(parsed));
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('Erro ao conectar ao ViaCEP:', err);
+      } finally {
+        setLoadingCep(false);
+      }
+    }
+  };
 
   // Hydrate fields on edit
   useEffect(() => {
@@ -79,6 +139,15 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
       setEndereco(initialProduto.endereco);
       setNomeLoja(initialProduto.nomeLoja);
       setImageUrl(initialProduto.imageUrl || '');
+      if (initialProduto.imagens && initialProduto.imagens.length > 0) {
+        const loaded = [...initialProduto.imagens];
+        while (loaded.length < 3) loaded.push('');
+        setImagens(loaded.slice(0, 3));
+      } else if (initialProduto.imageUrl) {
+        setImagens([initialProduto.imageUrl, '', '']);
+      } else {
+        setImagens(['', '', '']);
+      }
     } else {
       // Set sensible default values for creation
       setNomeLoja(user?.nome || '');
@@ -92,6 +161,86 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
 
   const handlePresetSelect = (url: string) => {
     setImageUrl(url);
+    setImagens(prev => {
+      const copy = [...prev];
+      copy[0] = url; // front photo slot
+      return copy;
+    });
+  };
+
+  const handleFileChange = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const validExtensions = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+      if (!validExtensions.includes(file.type)) {
+        alert('Formato inválido! Envie apenas imagens PNG, JPG, JPEG ou WEBP.');
+        return;
+      }
+      
+      if (file.size > 5 * 1024 * 1024) {
+        alert('A imagem é muito pesada! Escolha um arquivo de no máximo 5MB.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 500;
+          const MAX_HEIGHT = 500;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            setImagens(prev => {
+              const copy = [...prev];
+              copy[index] = event.target?.result as string;
+              return copy;
+            });
+            return;
+          }
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.65);
+          setImagens(prev => {
+            const copy = [...prev];
+            copy[index] = compressedBase64;
+            return copy;
+          });
+        };
+        img.onerror = () => alert('Erro estruturando imagem.');
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao carregar a imagem.');
+    }
+  };
+
+  const clearSlot = (index: number) => {
+    setImagens(prev => {
+      const copy = [...prev];
+      copy[index] = '';
+      return copy;
+    });
   };
 
   const handleLocalSubmit = async (e: React.FormEvent) => {
@@ -117,6 +266,9 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
       return;
     }
 
+    const cleanImagens = imagens.filter(img => img !== '');
+    const firstImage = cleanImagens[0] || imageUrl.trim() || undefined;
+
     setSubmitting(true);
     try {
       await onSubmit({
@@ -129,7 +281,8 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
         quantidadeDisponivel: Number(quantidadeDisponivel),
         endereco,
         nomeLoja: nomeLoja || user?.nome || 'Mercado Geral',
-        imageUrl: imageUrl.trim() || undefined
+        imageUrl: firstImage,
+        imagens: cleanImagens.length > 0 ? cleanImagens : (imageUrl.trim() ? [imageUrl.trim()] : [])
       });
     } catch (error) {
       console.error(error);
@@ -182,17 +335,36 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
 
             {/* Product Category dropdown */}
             <div>
-              <label className="block text-xs font-bold text-gray-500 font-mono uppercase mb-1">Categoria</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-gray-500 font-mono uppercase">Categoria</label>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('admin-categorias')}
+                  className="text-[10px] text-emerald-600 hover:text-emerald-800 font-bold font-mono uppercase cursor-pointer transition-colors"
+                >
+                  + Gerenciar
+                </button>
+              </div>
               <select
                 value={categoria}
                 onChange={(e) => setCategoria(e.target.value)}
                 className="w-full text-sm px-4 py-2.5 bg-white/40 border border-white/50 rounded-xl focus:border-emerald-500 focus:bg-white/75 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
               >
-                {CATEGORY_OPTIONS.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+                {categorias.map((cat) => (
+                  <option key={cat.id || cat.nome} value={cat.nome}>
+                    {cat.nome}
                   </option>
                 ))}
+                {categorias.length === 0 && (
+                  <>
+                    <option value="Laticínios">Laticínios</option>
+                    <option value="Padaria">Padaria</option>
+                    <option value="Hortifrúti">Hortifrúti</option>
+                    <option value="Carnes">Carnes</option>
+                    <option value="Bebidas">Bebidas</option>
+                    <option value="Mercearia">Mercearia</option>
+                  </>
+                )}
               </select>
             </div>
           </div>
@@ -301,57 +473,142 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
             </div>
           </div>
 
-          {/* Physical Address of store */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 font-mono uppercase mb-1">Endereço de Retirada Física</label>
-            <input
-              type="text"
-              required
-              value={endereco}
-              onChange={(e) => setEndereco(e.target.value)}
-              placeholder="Ex: Rua das Flores, 123 - Centro, São Paulo / SP"
-              className="w-full text-sm px-4 py-2.5 bg-white/40 border border-white/50 rounded-xl focus:border-emerald-500 focus:bg-white/75 focus:outline-none focus:ring-1 focus:ring-emerald-505 transition-all"
-            />
-          </div>
-        </div>
+          {/* Physical Address of store with CEP search helper */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-1">
+              <label className="block text-xs font-bold text-gray-500 font-mono uppercase mb-1">Buscar por CEP</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  maxLength={9}
+                  placeholder="01000-000"
+                  value={cepInput}
+                  onChange={(e) => handleCepChange(e.target.value)}
+                  className="w-full text-sm px-4 py-2.5 bg-white/40 border border-white/50 rounded-xl focus:border-emerald-500 focus:bg-white/75 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-mono font-bold"
+                />
+                {loadingCep && (
+                  <span className="absolute right-3 top-3 text-xs text-emerald-600 animate-pulse font-mono font-extrabold">...</span>
+                )}
+              </div>
+            </div>
 
-        {/* Visual asset/image and presets column */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 font-mono uppercase mb-1">Link da Imagem ou Preset</label>
-            <div className="relative">
-              <ImageIcon className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-400" />
+            <div className="md:col-span-3">
+              <label className="block text-xs font-bold text-gray-500 font-mono uppercase mb-1">Endereço de Retirada Física</label>
               <input
                 type="text"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="Insira URL https://... ou use um preset abaixo"
-                className="w-full text-sm ps-10 pe-4 py-2.5 bg-white/40 border border-white/50 rounded-xl focus:border-emerald-500 focus:bg-white/75 focus:outline-none transition-all"
+                required
+                value={endereco}
+                onChange={(e) => setEndereco(e.target.value)}
+                placeholder="Ex: Rua das Flores, 123 - Centro, São Paulo / SP"
+                className="w-full text-sm px-4 py-2.5 bg-white/40 border border-white/50 rounded-xl focus:border-emerald-500 focus:bg-white/75 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all font-semibold text-gray-800"
               />
             </div>
           </div>
+        </div>
 
-          {/* Preset Picker list */}
-          <div className="bg-white/30 backdrop-blur-xs rounded-2xl p-4 border border-white/40">
-            <h4 className="text-xs font-bold text-gray-600 font-mono uppercase mb-3 flex items-center gap-1">
-              <Check className="w-3.5 h-3.5 text-emerald-500" /> Predefinições Rápidas de Imagem
+        {/* Visual assets (Multi-photo system and guide instructions) */}
+        <div className="space-y-4">
+          
+          {/* Photos Positioning Standards Guideline Card */}
+          <div className="bg-amber-50/60 border border-amber-200/50 rounded-2xl p-4 text-left">
+            <h4 className="text-xs font-bold text-amber-900 font-mono uppercase mb-2 flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              Padrão Fotográfico Recomendado
             </h4>
-            <div className="grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto pr-1">
+            <p className="text-[11px] text-amber-800 leading-normal mb-3">
+              Para o catálogo seguir um padrão visual atraente, recomendamos subir até 3 fotos conforme abaixo:
+            </p>
+            <div className="space-y-2 text-[11px]">
+              <div className="flex items-start gap-1.5 text-amber-900">
+                <span className="font-mono font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-md leading-none mt-0.5">FRENTE</span>
+                <span className="leading-tight">A primeira foto <strong>deve ser de frente</strong>, apresentando o rótulo principal e identificação da marca.</span>
+              </div>
+              <div className="flex items-start gap-1.5 text-amber-900">
+                <span className="font-mono font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-md leading-none mt-0.5">DIREITO</span>
+                <span className="leading-tight">A segunda foto mostra a <strong>lateral direita</strong>, ideal para código de barras, peso líquido ou avisos.</span>
+              </div>
+              <div className="flex items-start gap-1.5 text-amber-900">
+                <span className="font-mono font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-md leading-none mt-0.5">ESQUERDO</span>
+                <span className="leading-tight">A terceira foto exibe a <strong>lateral esquerda</strong> (ou traseira), provando a data e o lote do produto.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive slots container */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 font-mono uppercase mb-2">Fotos do Lote (Até 3 fotos / PNG, JPG, WEBP / Comprimido)</label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                { label: 'Frente', detail: 'Frente' },
+                { label: 'Direito', detail: 'Lado Dir.' },
+                { label: 'Esquerdo', detail: 'Lado Esq.' }
+              ].map((slot, idx) => (
+                <div key={idx} className="flex flex-col gap-1 text-center">
+                  <div className="relative aspect-square rounded-xl border-2 border-dashed border-gray-205 border-gray-300 hover:border-emerald-500 bg-white/30 hover:bg-emerald-50/10 transition-all flex flex-col justify-center items-center overflow-hidden group">
+                    {imagens[idx] ? (
+                      <>
+                        <img src={imagens[idx]} alt={`Slot ${slot.label}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex justify-center items-center gap-1.5 p-1">
+                          <button
+                            type="button"
+                            onClick={() => clearSlot(idx)}
+                            className="p-1 rounded-lg bg-red-650 bg-rose-600 text-white hover:bg-rose-700 transition-all cursor-pointer"
+                            title="Remover foto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <label className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all cursor-pointer">
+                            <Camera className="w-3.5 h-3.5" />
+                            <input
+                              type="file"
+                              accept=".png,.jpg,.jpeg,.webp"
+                              onChange={(e) => handleFileChange(idx, e)}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </>
+                    ) : (
+                      <label className="w-full h-full flex flex-col justify-center items-center p-2 cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500">
+                        <Camera className="w-4 h-4 text-gray-400 group-hover:text-emerald-500 transition-colors" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-emerald-600 transition-colors mt-1 leading-none">{slot.label}</span>
+                        <span className="text-[7.5px] font-mono text-gray-300 mt-1 uppercase">Subir</span>
+                        <input
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.webp"
+                          onChange={(e) => handleFileChange(idx, e)}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <span className="text-[9px] font-bold text-gray-400 font-mono uppercase">{slot.detail}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Predefined presets helper */}
+          <div className="bg-white/30 backdrop-blur-xs rounded-2xl p-4 border border-white/40 text-left">
+            <h4 className="text-xs font-bold text-gray-600 font-mono uppercase mb-3 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Presets de Imagem (Carrega Frente)
+            </h4>
+            <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
               {IMAGE_PRESETS.map((preset) => (
                 <button
                   key={preset.name}
                   type="button"
                   onClick={() => handlePresetSelect(preset.url)}
                   className={`relative aspect-video rounded-lg overflow-hidden border-2 text-left cursor-pointer transition-all ${
-                    imageUrl === preset.url ? 'border-emerald-500 scale-95 ring-2 ring-emerald-500/20' : 'border-transparent opacity-85 hover:opacity-100 hover:scale-98'
+                    imagens[0] === preset.url ? 'border-emerald-500 scale-95' : 'border-transparent opacity-85 hover:opacity-100 hover:scale-98'
                   }`}
                 >
                   <img src={preset.url} alt={preset.name} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/40 p-1.5 flex items-end">
                     <span className="text-[9px] font-bold text-white tracking-tight line-clamp-1 leading-none">{preset.name}</span>
                   </div>
-                  {imageUrl === preset.url && (
-                    <div className="absolute top-1 right-1 bg-emerald-500 text-white p-0.5 rounded-full shadow-xs">
+                  {imagens[0] === preset.url && (
+                    <div className="absolute top-1 right-1 bg-emerald-505 bg-emerald-500 text-white p-0.5 rounded-full shadow-xs">
                       <Check className="w-2.5 h-2.5 font-bold" />
                     </div>
                   )}
@@ -360,13 +617,27 @@ export const AdminProdutoForm: React.FC<AdminProdutoFormProps> = ({
             </div>
           </div>
 
-          {/* Real-time image preview */}
-          {imageUrl && (
-            <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-xs relative">
-              <span className="absolute top-2 right-2 bg-black/55 text-white font-mono text-[9px] px-1.5 py-0.5 rounded-lg">PRÉVIA</span>
-              <img src={imageUrl} alt="Preview" className="w-full aspect-video object-cover" />
+          <div className="border-t border-gray-100 pt-3">
+            <label className="block text-[10px] font-bold text-gray-400 font-mono uppercase mb-1">Ou edite o Link da Primeira Foto (URL)</label>
+            <div className="relative">
+              <ImageIcon className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={imagens[0] || imageUrl}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setImageUrl(val);
+                  setImagens(prev => {
+                    const copy = [...prev];
+                    copy[0] = val;
+                    return copy;
+                  });
+                }}
+                placeholder="Insira URL https://..."
+                className="w-full text-xs ps-8 pe-3 py-2 bg-white/40 border border-white/50 rounded-lg focus:border-emerald-500 focus:bg-white/75 focus:outline-none transition-all"
+              />
             </div>
-          )}
+          </div>
         </div>
       </div>
 

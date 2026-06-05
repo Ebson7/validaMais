@@ -31,7 +31,7 @@ service cloud.firestore {
         'quantidadeDisponivel', 'quantidadeReservada', 'status', 
         'endereco', 'criadoEm'
       ]) &&
-        data.keys().size() <= 14 &&
+        data.keys().size() <= 15 &&
         data.adminId is string && data.adminId.size() <= 128 &&
         data.nomeLoja is string && data.nomeLoja.size() <= 200 &&
         data.nomeProduto is string && data.nomeProduto.size() <= 200 &&
@@ -45,7 +45,8 @@ service cloud.firestore {
         data.endereco is string && data.endereco.size() <= 300 &&
         data.criadoEm != null &&
         (!data.keys().hasAny(['descricao']) || (data.descricao is string && data.descricao.size() <= 2000)) &&
-        (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000));
+        (!data.keys().hasAny(['imageUrl']) || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
+        (!data.keys().hasAny(['imagens']) || (data.imagens is list && data.imagens.size() <= 3));
     }
 
     function isValidReserva(data) {
@@ -65,6 +66,48 @@ service cloud.firestore {
         data.status is string && (data.status == 'pendente' || data.status == 'retirado' || data.status == 'cancelado') &&
         data.criadoEm != null &&
         data.atualizadoEm != null;
+    }
+
+    function isValidAvaliacao(data) {
+      return data.keys().hasAll([
+        'reservaId', 'nomeLoja', 'usuarioId', 'usuarioEmail', 'estrelas', 'comentario', 'criadoEm'
+      ]) &&
+        data.keys().size() <= 8 &&
+        data.reservaId is string && data.reservaId.size() <= 128 &&
+        data.nomeLoja is string && data.nomeLoja.size() <= 200 &&
+        data.usuarioId is string && data.usuarioId.size() <= 128 &&
+        data.usuarioEmail is string && data.usuarioEmail.size() <= 256 &&
+        data.estrelas is number && data.estrelas >= 1 && data.estrelas <= 5 &&
+        data.comentario is string && data.comentario.size() <= 1000 &&
+        data.criadoEm != null;
+    }
+
+    function isValidNotificacaoPreferencias(data) {
+      return data.keys().hasAll([
+        'uid', 'cepsDesejados', 'distanciaKm', 'notificarNovosDescontos', 'fcmTokens'
+      ]) &&
+        data.keys().size() == 5 &&
+        data.uid is string && data.uid.size() <= 128 &&
+        data.cepsDesejados is list &&
+        data.distanciaKm is number &&
+        data.notificarNovosDescontos is bool &&
+        data.fcmTokens is list;
+    }
+
+    function isValidNotificacao(data) {
+      return data.keys().hasAll([
+        'usuarioId', 'titulo', 'mensagem', 'produtoId', 'nomeLoja', 'precoOriginal', 'precoPromocional', 'lido', 'criadoEm'
+      ]) &&
+        data.keys().size() == 9 &&
+        data.usuarioId is string && data.usuarioId.size() <= 128 &&
+        data.titulo is string && data.titulo.size() <= 200 &&
+        data.mensagem is string && data.mensagem.size() <= 1000 &&
+        data.produtoId is string && data.produtoId.size() <= 128 &&
+        data.nomeLoja is string && data.nomeLoja.size() <= 200 &&
+        data.precoOriginal is number &&
+        data.precoPromocional is number &&
+        data.lido is bool &&
+        data.criadoEm != null;
     }
 
     // Collections Matches
@@ -88,6 +131,27 @@ service cloud.firestore {
       allow read, get, list: if true;
       allow create, update: if isValidReserva(request.resource.data);
       allow delete: if true;
+    }
+
+    // AVALIACOES COLLECTION
+    match /avaliacoes/{avaliacaoId} {
+      allow read, get, list: if true;
+      allow create: if isSignedIn() && isValidAvaliacao(request.resource.data);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.usuarioId);
+    }
+
+    // NOTIFICACOES PREFERENCIAS
+    match /notificacoes_preferencias/{usuarioId} {
+      allow read, get: if isOwner(usuarioId);
+      allow create, update: if isOwner(usuarioId) && isValidNotificacaoPreferencias(request.resource.data);
+      allow delete: if isOwner(usuarioId);
+    }
+
+    // NOTIFICACOES FEED
+    match /notificacoes/{notificacaoId} {
+      allow read, get, list: if isSignedIn() && resource.data.usuarioId == request.auth.uid;
+      allow create: if isSignedIn() && isValidNotificacao(request.resource.data);
+      allow update, delete: if isSignedIn() && resource.data.usuarioId == request.auth.uid;
     }
   }
 }

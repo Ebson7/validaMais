@@ -6,6 +6,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getMessaging, Messaging } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -16,6 +17,19 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Firebase Auth
 export const auth = getAuth();
+
+// Initialize Messaging (FCM) safely with fallback support for iframe and non-supporting environments
+let messagingInstance: Messaging | null = null;
+try {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+    messagingInstance = getMessaging(app);
+  }
+} catch (error) {
+  console.warn('Firebase Cloud Messaging client initialization is skipped or unsupported on this browser/sandbox: ', error);
+}
+
+export const messaging = messagingInstance;
+
 
 // Operational types for structured Firestore error handling (System Diagnosis requirement)
 export enum OperationType {

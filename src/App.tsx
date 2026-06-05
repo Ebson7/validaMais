@@ -15,7 +15,9 @@ import { MinhasReservasValida } from './components/screens/MinhasReservas';
 import { AdminDashboardValida } from './components/screens/AdminDashboard';
 import { AdminProdutosValida } from './components/screens/AdminProdutos';
 import { AdminReservasValida } from './components/screens/AdminReservas';
+import { AdminCategoriasValida } from './components/screens/AdminCategorias';
 import { AlertCircle, CheckCircle2, ShieldAlert, Info, Loader2, Sparkles, AlertTriangle } from 'lucide-react';
+import { motion } from 'motion/react';
 
 function AppContent() {
   const { currentScreen, loading, alert, setAlert } = useApp();
@@ -43,6 +45,8 @@ function AppContent() {
         return <AdminProdutosValida />;
       case 'admin-reservas':
         return <AdminReservasValida />;
+      case 'admin-categorias':
+        return <AdminCategoriasValida />;
       default:
         return <HomeValida />;
     }
@@ -118,7 +122,14 @@ function AppContent() {
 
         {/* Secondary Page Content Container */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8">
-          {renderActiveScreen()}
+          <motion.div
+            key={currentScreen}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+          >
+            {renderActiveScreen()}
+          </motion.div>
         </main>
       </div>
 

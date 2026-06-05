@@ -17,6 +17,7 @@
         "quantidadeDisponivel": { "type": "number" },
         "quantidadeReservada": { "type": "number" },
         "imageUrl": { "type": "string" },
+        "imagens": { "type": "array" },
         "status": { "type": "string", "enum": [ "disponivel", "esgotado" ] },
         "endereco": { "type": "string" },
         "criadoEm": { "type": "object" }
@@ -84,6 +85,53 @@
         "role",
         "criadoEm"
       ]
+    },
+    "NotificacaoPreferencias": {
+      "title": "NotificacaoPreferencias",
+      "description": "Configurações de notificações de descontos para o usuário",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "cepsDesejados": { "type": "array" },
+        "distanciaKm": { "type": "number" },
+        "notificarNovosDescontos": { "type": "boolean" },
+        "fcmTokens": { "type": "array" }
+      },
+      "required": [
+        "uid",
+        "cepsDesejados",
+        "distanciaKm",
+        "notificarNovosDescontos",
+        "fcmTokens"
+      ]
+    },
+    "NotificacaoFeedItem": {
+      "title": "NotificacaoFeedItem",
+      "description": "Um item individual no feed de notificações do usuário",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "usuarioId": { "type": "string" },
+        "titulo": { "type": "string" },
+        "mensagem": { "type": "string" },
+        "produtoId": { "type": "string" },
+        "nomeLoja": { "type": "string" },
+        "precoOriginal": { "type": "number" },
+        "precoPromocional": { "type": "number" },
+        "lido": { "type": "boolean" },
+        "criadoEm": { "type": "object" }
+      },
+      "required": [
+        "usuarioId",
+        "titulo",
+        "mensagem",
+        "produtoId",
+        "nomeLoja",
+        "precoOriginal",
+        "precoPromocional",
+        "lido",
+        "criadoEm"
+      ]
     }
   },
   "firestore": {
@@ -98,6 +146,14 @@
     "usuarios/{usuarioId}": {
       "schema": "Usuario",
       "description": "Dados do perfil de usuários com controle de perfil (roles)"
+    },
+    "notificacoes_preferencias/{usuarioId}": {
+      "schema": "NotificacaoPreferencias",
+      "description": "Preferências de push e CEPs inscritos por usuário"
+    },
+    "notificacoes/{notificacaoId}": {
+      "schema": "NotificacaoFeedItem",
+      "description": "Feed de pushes recebidos indexados por usuário"
     }
   }
 }

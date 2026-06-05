@@ -11,10 +11,12 @@ import { ProdutoCard } from '../ProdutoCard';
 import { AlertCircle, SlidersHorizontal, Loader2 } from 'lucide-react';
 
 export const ProdutosValida: React.FC = () => {
-  const { produtos, produtosLoading: loading } = useApp();
+  const { produtos, categorias, produtosLoading: loading } = useApp();
 
   // States of the filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [cepQuery, setCepQuery] = useState('');
+  const [cepResolvedRegion, setCepResolvedRegion] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [selectedStore, setSelectedStore] = useState('');
   const [sortBy, setSortBy] = useState('URGENTE_PRIMEIRO');
@@ -42,6 +44,14 @@ export const ProdutosValida: React.FC = () => {
     // 3. Store filter
     if (selectedStore && product.nomeLoja !== selectedStore) {
       return false;
+    }
+
+    // 4. CEP filter (match resolved region in product address or store name)
+    if (cepResolvedRegion) {
+      const matchRegion = cepResolvedRegion.toLowerCase().trim();
+      const addressMatch = product.endereco?.toLowerCase().includes(matchRegion);
+      const storeNameMatch = product.nomeLoja?.toLowerCase().includes(matchRegion);
+      if (!addressMatch && !storeNameMatch) return false;
     }
 
     return true;
@@ -78,13 +88,17 @@ export const ProdutosValida: React.FC = () => {
       <FiltrosProdutos
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        cepQuery={cepQuery}
+        setCepQuery={setCepQuery}
+        cepResolvedRegion={cepResolvedRegion}
+        setCepResolvedRegion={setCepResolvedRegion}
         selectedCategory={selectedCategory}
         setSelectedCategory={setSelectedCategory}
         selectedStore={selectedStore}
         setSelectedStore={setSelectedStore}
         sortBy={sortBy}
         setSortBy={setSortBy}
-        categories={availableCategories.length > 0 ? availableCategories : ['Laticínios', 'Padaria', 'Hortifrúti', 'Carnes', 'Bebidas', 'Mercearia']}
+        categories={categorias.length > 0 ? categorias.map(c => c.nome) : ['Laticínios', 'Padaria', 'Hortifrúti', 'Carnes', 'Bebidas', 'Mercearia']}
         stores={availableStores}
       />
 

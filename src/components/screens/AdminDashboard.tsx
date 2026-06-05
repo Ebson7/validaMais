@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Package, ShoppingBag, Clock, CheckSquare, PlusCircle, ClipboardList, TrendingUp } from 'lucide-react';
+import { Package, ShoppingBag, Clock, CheckSquare, PlusCircle, ClipboardList, TrendingUp, Tag } from 'lucide-react';
 
 export const AdminDashboardValida: React.FC = () => {
   const { user, navigateTo, produtos, reservas: allReservas, produtosLoading, reservasLoadingPre, clearAllDatabaseUsers } = useApp();
@@ -117,7 +117,7 @@ export const AdminDashboardValida: React.FC = () => {
       )}
 
       {/* Admin Shortcuts Grid layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Box 1 */}
         <button
           onClick={() => navigateTo('admin-produtos-novo')}
@@ -126,7 +126,7 @@ export const AdminDashboardValida: React.FC = () => {
           <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-105">
             <PlusCircle className="w-6 h-6" />
           </div>
-          <h3 className="font-extrabold text-sm text-gray-900">Novo Lote Promocional</h3>
+          <h3 className="font-extrabold text-sm text-gray-901 text-gray-900	">Novo Lote Promocional</h3>
           <p className="text-xs text-gray-500 mt-1 lines-clamp-2 leading-relaxed">
             Cadastre os itens perecíveis do seu estoque que estão aproximando-se do prazo regulamentar e determine preços reduzidos de liquidação.
           </p>
@@ -154,9 +154,23 @@ export const AdminDashboardValida: React.FC = () => {
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-105">
             <ShoppingBag className="w-6 h-6" />
           </div>
-          <h3 className="font-extrabold text-sm text-gray-900">Gerenciar Reservas Recebidas</h3>
+          <h3 className="font-extrabold text-sm text-gray-900">Gerenciar Reservas</h3>
           <p className="text-xs text-gray-500 mt-1 lines-clamp-2 leading-relaxed">
             Consulte as solicitações de reserva feitas por usuários, identifique os clientes que virão retirar o mantimento e dê baixa para confirmar a retirada.
+          </p>
+        </button>
+
+        {/* Box 4 */}
+        <button
+          onClick={() => navigateTo('admin-categorias')}
+          className="glass rounded-3xl border-white/50 p-6 text-left hover:border-indigo-400 group cursor-pointer transition-all hover:shadow-md"
+        >
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-105">
+            <Tag className="w-5 h-5 text-indigo-650" />
+          </div>
+          <h3 className="font-extrabold text-sm text-gray-900">Categorias de Produtos</h3>
+          <p className="text-xs text-gray-500 mt-1 lines-clamp-2 leading-relaxed">
+            Personalize as divisões e departamentos de mantimentos cadastrando categorias sob demanda ou excluindo seções redundantes.
           </p>
         </button>
       </div>
