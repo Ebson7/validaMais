@@ -136,7 +136,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setProdutos(JSON.parse(local));
         }
         setProdutosLoading(false);
-        handleFirestoreError(error, OperationType.GET, 'produtos');
       }
     );
     return unsubscribe;
@@ -164,7 +163,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setReservas(JSON.parse(local));
         }
         setReservasLoading(false);
-        handleFirestoreError(error, OperationType.GET, 'reservas');
       }
     );
     return unsubscribe;
@@ -309,24 +307,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 3. Fallback: Auto-create simulated user if not found at all, and persist it to Firestore
+    // 3. Try fallback to simulated user in local storage (perfect for offline/unconfigured environments)
+    try {
+      const localUsersStr = localStorage.getItem('validamais_usuarios');
+      const localUsers: Usuario[] = localUsersStr ? JSON.parse(localUsersStr) : DEFAULT_USERS;
+      const matched = localUsers.find(u => u.email.toLowerCase() === emailLower);
+      
+      if (matched) {
+        const matchedAny = matched as any;
+        const expectedPass = matchedAny.senha || '123456';
+        if (expectedPass === password) {
+          setUser(matched);
+          localStorage.setItem('validamais_currentUser', JSON.stringify(matched));
+          showAlert(`Bem-vindo de volta, ${matched.nome}! (Sessão Local)`, 'success');
+          if (matched.role === 'admin') {
+            navigateTo('admin-dashboard');
+          } else {
+            navigateTo('home');
+          }
+          return;
+        } else {
+          showAlert('E-mail ou senha incorretos.', 'error');
+          setLoading(false);
+          throw new Error('E-mail ou senha incorretos.');
+        }
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('incorretos')) {
+        throw err;
+      }
+    }
+
+    // 4. Fallback: Auto-create simulated user if not found at all, and persist it to Firestore & LocalStorage
     try {
       const autoRole: UserRole = (emailLower.includes('admin') || emailLower.includes('lojista') || emailLower.includes('comerciante')) ? 'admin' : 'user';
       const autoName = emailLower.split('@')[0].replace(/[^a-zA-Z]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Consumidor';
       const simulatedUid = 'sim_' + emailLower.replace(/[^a-zA-Z0-9]/g, '_');
       
-      const newProfile = await createOrUpdateUserDocument(simulatedUid, emailLower, autoName, autoRole, password);
+      let newProfile: Usuario;
+      try {
+        newProfile = await createOrUpdateUserDocument(simulatedUid, emailLower, autoName, autoRole, password);
+      } catch (dbErr) {
+        console.warn("Firestore write failed for simulated user, creating purely local user document instead:", dbErr);
+        newProfile = {
+          uid: simulatedUid,
+          email: emailLower,
+          nome: autoName,
+          role: autoRole,
+          criadoEm: new Date().toISOString()
+        };
+      }
+
+      // Add to local list
+      const localUsersStr = localStorage.getItem('validamais_usuarios');
+      const localUsers: Usuario[] = localUsersStr ? JSON.parse(localUsersStr) : [...DEFAULT_USERS];
+      if (!localUsers.some(u => u.uid === newProfile.uid)) {
+        localUsers.push({
+          ...newProfile,
+          senha: password
+        } as any);
+        localStorage.setItem('validamais_usuarios', JSON.stringify(localUsers));
+      }
+
       setUser(newProfile);
       localStorage.setItem('validamais_currentUser', JSON.stringify(newProfile));
-      showAlert(`Bem-vindo, ${newProfile.nome}! (Conta simulada criada e persistida no Firebase)`, 'success');
+      showAlert(`Bem-vindo, ${newProfile.nome}! (Conta simulada criada com sucesso)`, 'success');
       if (newProfile.role === 'admin') {
         navigateTo('admin-dashboard');
       } else {
         navigateTo('home');
       }
     } catch (err: any) {
-      console.error("Firestore write failed:", err);
-      showAlert('Erro ao se conectar ao banco de dados.', 'error');
+      console.error("Critical identity setup exception:", err);
+      showAlert('Erro ao processar autenticação.', 'error');
     } finally {
       setLoading(false);
     }
@@ -355,9 +408,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // 2. Simulated registration in Firestore (allows cross-browser testing for anyone)
+    const simulatedUid = 'sim_' + emailLower.replace(/[^a-zA-Z0-9]/g, '_');
     try {
-      const simulatedUid = 'sim_' + emailLower.replace(/[^a-zA-Z0-9]/g, '_');
-      
       const existingProfile = await getUserProfile(simulatedUid);
       if (existingProfile) {
         showAlert('Este e-mail já está sendo utilizado.', 'error');
@@ -366,18 +418,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const userProfile = await createOrUpdateUserDocument(simulatedUid, emailLower, name.trim(), role, password);
+      
+      // Update local storage too
+      const localUsersStr = localStorage.getItem('validamais_usuarios');
+      const localUsers: Usuario[] = localUsersStr ? JSON.parse(localUsersStr) : [...DEFAULT_USERS];
+      if (!localUsers.some(u => u.uid === userProfile.uid)) {
+        localUsers.push({
+          ...userProfile,
+          senha: password
+        } as any);
+        localStorage.setItem('validamais_usuarios', JSON.stringify(localUsers));
+      }
+
       setUser(userProfile);
       localStorage.setItem('validamais_currentUser', JSON.stringify(userProfile));
       
-      showAlert(`Sua conta de teste '${userProfile.nome}' foi criada e persistida no Firebase!`, 'success');
+      showAlert(`Sua conta de teste '${userProfile.nome}' foi criada e cadastrada com sucesso!`, 'success');
       if (role === 'admin') {
         navigateTo('admin-dashboard');
       } else {
         navigateTo('home');
       }
     } catch (err: any) {
-      console.error("Firestore registration failure:", err);
-      showAlert('Falha ao processar cadastro no banco de dados remoto.', 'error');
+      if (err.message && err.message.includes('em uso')) {
+        throw err;
+      }
+
+      console.warn("Firestore registration failed, falling back to local storage-only registration:", err);
+      
+      // Local storage fallback
+      const localUsersStr = localStorage.getItem('validamais_usuarios');
+      const localUsers: Usuario[] = localUsersStr ? JSON.parse(localUsersStr) : [...DEFAULT_USERS];
+      const emailExists = localUsers.some(u => u.email.toLowerCase() === emailLower);
+      if (emailExists) {
+        showAlert('Este e-mail já está sendo utilizado.', 'error');
+        setLoading(false);
+        throw new Error('E-mail já está em uso.');
+      }
+
+      const userProfile: Usuario = {
+        uid: simulatedUid,
+        email: emailLower,
+        nome: name.trim(),
+        role: role,
+        criadoEm: new Date().toISOString()
+      };
+
+      localUsers.push({
+        ...userProfile,
+        senha: password
+      } as any);
+      localStorage.setItem('validamais_usuarios', JSON.stringify(localUsers));
+
+      setUser(userProfile);
+      localStorage.setItem('validamais_currentUser', JSON.stringify(userProfile));
+
+      showAlert(`Sua conta de teste '${userProfile.nome}' foi criada localmente com sucesso!`, 'success');
+      if (role === 'admin') {
+        navigateTo('admin-dashboard');
+      } else {
+        navigateTo('home');
+      }
     } finally {
       setLoading(false);
     }
