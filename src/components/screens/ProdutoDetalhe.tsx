@@ -5,43 +5,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { getProductById, createReservation } from '../../lib/db-wrapper';
-import { Produto, Reserva } from '../../types';
 import { Store, Calendar, MapPin, DollarSign, Plus, Minus, CreditCard, ShieldCheck, ShoppingCart, Loader2, Info } from 'lucide-react';
 
 export const ProdutoDetalheValida: React.FC = () => {
-  const { selectedProductId, navigateTo, user, showAlert } = useApp();
-  const [produto, setProduto] = useState<Produto | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { selectedProductId, navigateTo, user, showAlert, produtos, produtosLoading: loading, createReservation } = useApp();
   const [quantidade, setQuantidade] = useState(1);
   const [reserving, setReserving] = useState(false);
+
+  const produto = produtos.find(p => p.id === selectedProductId) || null;
 
   useEffect(() => {
     if (!selectedProductId) {
       navigateTo('home');
       return;
     }
-
-    const loadProduct = async () => {
-      setLoading(true);
-      try {
-        const prod = await getProductById(selectedProductId);
-        if (prod) {
-          setProduto(prod);
-        } else {
-          showAlert('Produto não localizado.', 'error');
-          navigateTo('home');
-        }
-      } catch (err) {
-        console.error(err);
-        showAlert('Erro ao abrir dados do lote.', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProduct();
-  }, [selectedProductId]);
+    if (!loading && !produto) {
+      showAlert('Produto não localizado.', 'error');
+      navigateTo('home');
+    }
+  }, [selectedProductId, loading, produto]);
 
   if (loading) {
     return (
@@ -112,12 +94,10 @@ export const ProdutoDetalheValida: React.FC = () => {
 
     setReserving(true);
     try {
-      await createReservation(user.uid, user.email, produto.id!, quantidade);
-      showAlert('Reserva realizada com sucesso!', 'success');
+      await createReservation(produto.id!, quantidade);
       navigateTo('minhas-reservas');
     } catch (err: any) {
       console.error(err);
-      showAlert(err.message || 'Erro ao processar reserva. Tente novamente.', 'error');
     } finally {
       setReserving(false);
     }

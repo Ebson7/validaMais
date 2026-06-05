@@ -3,52 +3,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Produto } from '../../types';
-import { getProducts, seedDefaultProducts } from '../../lib/db-wrapper';
 import { ProdutoCard } from '../ProdutoCard';
 import { Calendar, Store, Percent, ShieldAlert, Sparkles, AlertCircle, ShoppingBag, Leaf, ChevronRight, Info } from 'lucide-react';
 
 export const HomeValida: React.FC = () => {
-  const { navigateTo, user, showAlert } = useApp();
-  const [loading, setLoading] = useState(true);
-  const [highlights, setHighlights] = useState<Produto[]>([]);
-  const [dbEmpty, setDbEmpty] = useState(false);
+  const { navigateTo, user, showAlert, produtos, produtosLoading: loading, seedProducts } = useApp();
   const [seeding, setSeeding] = useState(false);
 
-  const fetchHighlights = async () => {
-    setLoading(true);
-    try {
-      const allProds = await getProducts();
-      // Sort by validity date and limit to 3 items
-      const sorted = [...allProds]
-        .filter(p => p.status === 'disponivel')
-        .sort((a, b) => new Date(a.dataValidade).getTime() - new Date(b.dataValidade).getTime())
-        .slice(0, 3);
-      setHighlights(sorted);
-      setDbEmpty(allProds.length === 0);
-    } catch (error) {
-      console.error("Error drawing highlights: ", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const highlights = [...produtos]
+    .filter(p => p.status === 'disponivel')
+    .sort((a, b) => new Date(a.dataValidade).getTime() - new Date(b.dataValidade).getTime())
+    .slice(0, 3);
 
-  useEffect(() => {
-    fetchHighlights();
-  }, []);
+  const dbEmpty = produtos.length === 0;
 
   const handleCreateMockData = async () => {
     setSeeding(true);
     try {
-      // Seed using the logged-in admin's ID, or a default string
-      const creatorId = user?.uid || 'mock_userId_admin1';
-      const count = await seedDefaultProducts(creatorId);
-      showAlert(`Sucesso! ${count} produtos de teste gerados com datas calculadas no futuro.`, 'success');
-      fetchHighlights();
+      await seedProducts();
     } catch (err) {
-      showAlert('Erro ao gerar dados de teste.', 'error');
       console.error(err);
     } finally {
       setSeeding(false);

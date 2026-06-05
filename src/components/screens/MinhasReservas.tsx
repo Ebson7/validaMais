@@ -3,34 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { getReservations, cancelReservation } from '../../lib/db-wrapper';
-import { Reserva, Produto } from '../../types';
 import { ReservaCard } from '../ReservaCard';
 import { Loader2, Calendar, ShoppingCart, HelpCircle } from 'lucide-react';
 
 export const MinhasReservasValida: React.FC = () => {
-  const { user, navigateTo, showAlert } = useApp();
-  const [reservas, setReservas] = useState<Reserva[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, navigateTo, showAlert, reservas: allReservas, reservasLoading: loading, cancelReservation } = useApp();
 
-  const fetchReservas = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const results = await getReservations(user.uid);
-      setReservas(results);
-    } catch (err) {
-      console.error("Error drawing consumer bookings: ", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchReservas();
-  }, [user]);
+  const reservas = allReservas.filter(r => r.usuarioId === user?.uid);
 
   // Handle cancellation atomically returning items directly to merchant's product catalog
   const handleCancelReserva = async (reservaId: string, newStatus: 'retirado' | 'cancelado') => {
@@ -38,11 +19,8 @@ export const MinhasReservasValida: React.FC = () => {
 
     try {
       await cancelReservation(reservaId);
-      showAlert('Reserva cancelada com sucesso. Os itens retornaram ao catálogo do mercado.', 'info');
-      fetchReservas(); // trigger list refreshing
     } catch (err: any) {
       console.error(err);
-      showAlert(err.message || 'Erro ao efetuar cancelamento.', 'error');
     }
   };
 

@@ -3,34 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { getReservations, updateReservationStatus, cancelReservation } from '../../lib/db-wrapper';
-import { Reserva, Produto } from '../../types';
 import { ReservaCard } from '../ReservaCard';
 import { Loader2, ClipboardList, Info } from 'lucide-react';
 
 export const AdminReservasValida: React.FC = () => {
-  const { user, showAlert } = useApp();
-  const [reservas, setReservas] = useState<Reserva[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchAllReservas = async () => {
-    setLoading(true);
-    try {
-      const results = await getReservations();
-      setReservas(results);
-    } catch (err) {
-      console.error("Error drawing admin book listing: ", err);
-      showAlert('Erro ao obter reservas.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAllReservas();
-  }, []);
+  const { showAlert, reservas, reservasLoading: loading, updateReservationStatus, cancelReservation } = useApp();
 
   // Admin changing status: either confirming physical collection (withdraw) or canceling a voided booking
   const handleAdminStatusUpdate = async (reservaId: string, newStatus: 'retirado' | 'cancelado') => {
@@ -40,16 +19,8 @@ export const AdminReservasValida: React.FC = () => {
       } else {
         await updateReservationStatus(reservaId, newStatus);
       }
-
-      const succMsg = newStatus === 'retirado' 
-        ? 'Sucesso! Retirada física baixada e finalizada.' 
-        : 'Reserva cancelada e itens retornados ao estoque de prateleira.';
-
-      showAlert(succMsg, 'success');
-      fetchAllReservas();
     } catch (err: any) {
       console.error(err);
-      showAlert(err.message || 'Erro ao realizar baixa.', 'error');
     }
   };
 

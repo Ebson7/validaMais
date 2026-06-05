@@ -237,12 +237,12 @@ export async function saveProduct(formData: any, productId: string | null = null
   const localList = getLocalProducts();
   if (productId) {
     const index = localList.findIndex(p => p.id === productId);
-    const existing = localList[index] || {};
-    const quantityReserved = existing.quantidadeReservada || 0;
+    const existing = localList[index];
+    const quantityReserved = existing ? existing.quantidadeReservada : 0;
     const finalStatus = (formData.quantidadeDisponivel - quantityReserved <= 0) ? 'esgotado' : 'disponivel';
     
     savedProd = {
-      ...existing,
+      ...(existing || {}),
       ...formData,
       id: productId,
       quantidadeReservada: quantityReserved,
@@ -294,7 +294,7 @@ export async function getReservations(usuarioId?: string): Promise<Reserva[]> {
     const querySnap = await getDocs(q);
     const results: Reserva[] = [];
     querySnap.forEach((docSnap) => {
-      results.push({ id: docSnap.id, ...docSnap.data() } as Reserva);
+      results.push({ id: docSnap.id, ...(docSnap.data() as any) } as Reserva);
     });
     saveLocalReservations(results);
     return results;

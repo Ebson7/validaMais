@@ -11,10 +11,22 @@ import {
   signOut,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { doc, getDoc, onSnapshot, collection } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { createOrUpdateUserDocument, getUserProfile, loginSimulatedUser } from '../lib/auth';
-import { Usuario, UserRole } from '../types';
+import { Usuario, UserRole, Produto, Reserva } from '../types';
+import { 
+  getProducts, 
+  getStoreProducts, 
+  getProductById, 
+  saveProduct as dbSaveProduct, 
+  deleteProduct as dbDeleteProduct, 
+  getReservations as dbGetReservations, 
+  createReservation as dbCreateReservation, 
+  cancelReservation as dbCancelReservation, 
+  updateReservationStatus as dbUpdateReservationStatus,
+  seedDefaultProducts
+} from '../lib/db-wrapper';
 
 export type ScreenType = 
   | 'home' 
@@ -41,12 +53,22 @@ interface AppContextType {
   currentScreen: ScreenType;
   selectedProductId: string | null;
   alert: Alert | null;
+  produtos: Produto[];
+  reservas: Reserva[];
+  produtosLoading: boolean;
+  reservasLoading: boolean;
   setAlert: (alert: Alert | null) => void;
   showAlert: (message: string, type: Alert['type']) => void;
   navigateTo: (screen: ScreenType, productId?: string | null) => void;
   loginUser: (email: string, password: string) => Promise<void>;
   registerUser: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
   logoutUser: () => Promise<void>;
+  saveProduct: (formData: any, productId: string | null) => Promise<Produto>;
+  deleteProduct: (id: string) => Promise<void>;
+  createReservation: (produtoId: string, quantidade: number) => Promise<Reserva>;
+  cancelReservation: (reservaId: string) => Promise<void>;
+  updateReservationStatus: (reservaId: string, status: 'retirado' | 'cancelado') => Promise<void>;
+  seedProducts: () => Promise<void>;
 }
 
 const DEFAULT_USERS: Usuario[] = [
@@ -79,6 +101,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('home');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [alert, setAlertState] = useState<Alert | null>(null);
+
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [produtosLoading, setProdutosLoading] = useState(true);
+  const [reservasLoading, setReservasLoading] = useState(true);
+
+  // Real-time synchronization for 'produtos'
+  useEffect(() => {
+    setProdutosLoading(true);
+    const colRef = collection(db, 'produtos');
+    const unsubscribe = onSnapshot(
+      colRef,
+      (snapshot) => {
+        const results: Produto[] = [];
+        snapshot.forEach((docSnap) => {
+          results.push({ id: docSnap.id, ...docSnap.data() } as Produto);
+        });
+        if (results.length > 0) {
+          setProdutos(results);
+          localStorage.setItem('validamais_produtos', JSON.stringify(results));
+        } else {
+          const local = localStorage.getItem('validamais_produtos');
+          if (local) {
+            setProdutos(JSON.parse(local));
+          }
+        }
+        setProdutosLoading(false);
+      },
+      (error) => {
+        console.warn("Real-time produtos snapshot subscription failed: ", error);
+        const local = localStorage.getItem('validamais_produtos');
+        if (local) {
+          setProdutos(JSON.parse(local));
+        }
+        setProdutosLoading(false);
+        handleFirestoreError(error, OperationType.GET, 'produtos');
+      }
+    );
+    return unsubscribe;
+  }, []);
+
+  // Real-time synchronization for 'reservas'
+  useEffect(() => {
+    setReservasLoading(true);
+    const colRef = collection(db, 'reservas');
+    const unsubscribe = onSnapshot(
+      colRef,
+      (snapshot) => {
+        const results: Reserva[] = [];
+        snapshot.forEach((docSnap) => {
+          results.push({ id: docSnap.id, ...docSnap.data() } as Reserva);
+        });
+        setReservas(results);
+        localStorage.setItem('validamais_reservas', JSON.stringify(results));
+        setReservasLoading(false);
+      },
+      (error) => {
+        console.warn("Real-time reservas snapshot subscription failed: ", error);
+        const local = localStorage.getItem('validamais_reservas');
+        if (local) {
+          setReservas(JSON.parse(local));
+        }
+        setReservasLoading(false);
+        handleFirestoreError(error, OperationType.GET, 'reservas');
+      }
+    );
+    return unsubscribe;
+  }, []);
 
   // Seed default demo accounts to local storage and Firestore on first load
   useEffect(() => {
@@ -309,6 +399,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLoading(false);
   };
 
+  // CRUD wraps
+  const saveProduct = async (formData: any, productId: string | null = null): Promise<Produto> => {
+    setLoading(true);
+    try {
+      const adminId = user?.uid || 'mock_userId_admin1';
+      const savedProd = await dbSaveProduct(formData, productId, adminId);
+      showAlert(productId ? 'Lote promocional atualizado!' : 'Novo lote cadastrado com sucesso!', 'success');
+      return savedProd;
+    } catch (err: any) {
+      showAlert('Erro ao processar salvamento do produto.', 'error');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteProduct = async (id: string): Promise<void> => {
+    setLoading(true);
+    try {
+      await dbDeleteProduct(id);
+      showAlert('Lote promocional excluído com sucesso.', 'success');
+    } catch (err: any) {
+      showAlert('Erro ao excluir lote do sistema.', 'error');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createReservation = async (produtoId: string, quantidade: number): Promise<Reserva> => {
+    setLoading(true);
+    try {
+      if (!user) {
+        throw new Error('Identificação necessária: faça login para reservar.');
+      }
+      const res = await dbCreateReservation(user.uid, user.email, produtoId, quantidade);
+      showAlert('Reserva efetuada com sucesso! Retire em loja física.', 'success');
+      return res;
+    } catch (err: any) {
+      showAlert(err.message || 'Erro ao processar reserva.', 'error');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelReservation = async (reservaId: string): Promise<void> => {
+    setLoading(true);
+    try {
+      await dbCancelReservation(reservaId);
+      showAlert('Reserva cancelada com sucesso.', 'info');
+    } catch (err: any) {
+      showAlert('Erro ao processar cancelamento.', 'error');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateReservationStatus = async (reservaId: string, status: 'retirado' | 'cancelado'): Promise<void> => {
+    setLoading(true);
+    try {
+      await dbUpdateReservationStatus(reservaId, status);
+      showAlert(status === 'retirado' ? 'Entrega registrada com sucesso!' : 'Reserva cancelada com sucesso.', 'success');
+    } catch (err: any) {
+      showAlert('Erro ao atualizar status da retirada.', 'error');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seedProducts = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      const creatorId = user?.uid || 'mock_userId_admin1';
+      const count = await seedDefaultProducts(creatorId);
+      showAlert(`Sucesso! ${count} produtos de massa de teste gerados com sucesso.`, 'success');
+    } catch (err: any) {
+      showAlert('Erro ao preencher produtos de teste.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -318,12 +493,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentScreen,
         selectedProductId,
         alert,
+        produtos,
+        reservas,
+        produtosLoading,
+        reservasLoading,
         setAlert,
         showAlert,
         navigateTo,
         loginUser,
         registerUser,
-        logoutUser
+        logoutUser,
+        saveProduct,
+        deleteProduct,
+        createReservation,
+        cancelReservation,
+        updateReservationStatus,
+        seedProducts
       }}
     >
       {children}

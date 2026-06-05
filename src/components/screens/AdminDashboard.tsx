@@ -3,66 +3,43 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { getStoreProducts, getReservations } from '../../lib/db-wrapper';
-import { Produto, Reserva } from '../../types';
 import { Package, ShoppingBag, Clock, CheckSquare, PlusCircle, ClipboardList, TrendingUp } from 'lucide-react';
 
 export const AdminDashboardValida: React.FC = () => {
-  const { user, navigateTo } = useApp();
-  const [metrics, setMetrics] = useState({
-    totalProducts: 0,
-    pendingReservations: 0,
-    withdrawnReservations: 0,
-    itemsSaved: 0
-  });
-  const [loading, setLoading] = useState(true);
+  const { user, navigateTo, produtos, reservas: allReservas, produtosLoading, reservasLoadingPre } = useApp();
 
-  useEffect(() => {
-    if (!user) return;
+  // 1. Get products registered by this specific merchant admin
+  const myProducts = produtos.filter(p => p.criadorId === user?.uid);
 
-    const loadMetrics = async () => {
-      setLoading(true);
-      try {
-        // 1. Get products registered by this specific merchant admin
-        const myProducts = await getStoreProducts(user.uid);
+  // 2. Scan reservations
+  let pending = 0;
+  let withdrawn = 0;
+  let savedCount = 0;
 
-        // 2. Scan reservations
-        const allReservas = await getReservations();
-        let pending = 0;
-        let withdrawn = 0;
-        let savedCount = 0;
-
-        allReservas.forEach((res) => {
-          // Filter dynamically by products belonging to this admin
-          const hasProduct = myProducts.some(p => p.id === res.produtoId || p.nomeProduto === res.nomeProduto);
-          const belongsToLoja = res.nomeLoja === user.nome || (user.nome && res.nomeLoja?.toLowerCase().includes(user.nome.toLowerCase()));
-          
-          if (hasProduct || belongsToLoja) {
-            if (res.status === 'pendente') pending++;
-            if (res.status === 'retirado') {
-              withdrawn++;
-              savedCount += res.quantidade;
-            }
-          }
-        });
-
-        setMetrics({
-          totalProducts: myProducts.length,
-          pendingReservations: pending,
-          withdrawnReservations: withdrawn,
-          itemsSaved: savedCount
-        });
-      } catch (err) {
-        console.error("Error drawing admin metrics: ", err);
-      } finally {
-        setLoading(false);
+  allReservas.forEach((res) => {
+    // Filter dynamically by products belonging to this admin
+    const hasProduct = myProducts.some(p => p.id === res.produtoId || p.nomeProduto === res.nomeProduto);
+    const belongsToLoja = res.nomeLoja === user?.nome || (user?.nome && res.nomeLoja?.toLowerCase().includes(user.nome.toLowerCase()));
+    
+    if (hasProduct || belongsToLoja) {
+      if (res.status === 'pendente') pending++;
+      if (res.status === 'retirado') {
+        withdrawn++;
+        savedCount += res.quantidade;
       }
-    };
+    }
+  });
 
-    loadMetrics();
-  }, [user]);
+  const metrics = {
+    totalProducts: myProducts.length,
+    pendingReservations: pending,
+    withdrawnReservations: withdrawn,
+    itemsSaved: savedCount
+  };
+
+  const loading = false;
 
   return (
     <div id="admin_dashboard" className="space-y-8">

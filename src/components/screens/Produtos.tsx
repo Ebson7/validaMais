@@ -3,16 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { getProducts } from '../../lib/db-wrapper';
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
 import { Produto } from '../../types';
 import { FiltrosProdutos } from '../FiltrosProdutos';
 import { ProdutoCard } from '../ProdutoCard';
 import { AlertCircle, SlidersHorizontal, Loader2 } from 'lucide-react';
 
 export const ProdutosValida: React.FC = () => {
-  const [products, setProducts] = useState<Produto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { produtos, produtosLoading: loading } = useApp();
 
   // States of the filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,37 +19,12 @@ export const ProdutosValida: React.FC = () => {
   const [selectedStore, setSelectedStore] = useState('');
   const [sortBy, setSortBy] = useState('URGENTE_PRIMEIRO');
 
-  // Lists dynamically extracted from data
-  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-  const [availableStores, setAvailableStores] = useState<string[]>([]);
-
-  // Fetch products
-  useEffect(() => {
-    const loadProducts = async () => {
-      setLoading(true);
-      try {
-        const results = await getProducts();
-
-        setProducts(results);
-
-        // Derive unique categories and stores for filter dropdowns
-        const cats = Array.from(new Set(results.map(p => p.categoria))).filter(Boolean);
-        const stores = Array.from(new Set(results.map(p => p.nomeLoja))).filter(Boolean);
-
-        setAvailableCategories(cats);
-        setAvailableStores(stores);
-      } catch (err) {
-        console.error("Error drawing catalog: ", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProducts();
-  }, []);
+  // Derive unique categories and stores for filter dropdowns
+  const availableCategories = Array.from(new Set(produtos.map(p => p.categoria))).filter(Boolean);
+  const availableStores = Array.from(new Set(produtos.map(p => p.nomeLoja))).filter(Boolean);
 
   // Filter application pipeline
-  const filteredProducts = products.filter((product) => {
+  const filteredProducts = produtos.filter((product) => {
     // 1. Search filter (text search)
     if (searchQuery) {
       const matchText = searchQuery.toLowerCase();

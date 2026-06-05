@@ -5,34 +5,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { getStoreProducts, saveProduct, deleteProduct } from '../../lib/db-wrapper';
 import { Produto } from '../../types';
 import { AdminProdutoForm } from '../AdminProdutoForm';
 import { CirclePlus, Edit, Trash2, ShieldAlert, Tag, Calendar, ShoppingCart, Loader2 } from 'lucide-react';
 
 export const AdminProdutosValida: React.FC = () => {
-  const { user, navigateTo, currentScreen, selectedProductId, showAlert } = useApp();
-  const [products, setProducts] = useState<Produto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, navigateTo, currentScreen, selectedProductId, showAlert, produtos, produtosLoading: loading, saveProduct, deleteProduct } = useApp();
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
 
-  const fetchMyProducts = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const results = await getStoreProducts(user.uid);
-      setProducts(results);
-    } catch (err) {
-      console.error(err);
-      showAlert('Erro ao ler estoque.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMyProducts();
-  }, [user]);
+  const products = produtos.filter(p => p.criadorId === user?.uid);
 
   // Load product to edit if editing scale is selected
   useEffect(() => {
@@ -53,11 +34,8 @@ export const AdminProdutosValida: React.FC = () => {
 
     try {
       await deleteProduct(id);
-      showAlert('Lote promocional excluído com sucesso.', 'success');
-      fetchMyProducts();
     } catch (err) {
       console.error(err);
-      showAlert('Erro ao remover o produto do banco.', 'error');
     }
   };
 
@@ -67,18 +45,14 @@ export const AdminProdutosValida: React.FC = () => {
 
     try {
       if (currentScreen === 'admin-produtos-editar' && selectedProductId) {
-        await saveProduct(formData, selectedProductId, user.uid);
-        showAlert('Lote atualizado com sucesso!', 'success');
+        await saveProduct(formData, selectedProductId);
       } else {
-        await saveProduct(formData, null, user.uid);
-        showAlert('Produto cadastrado e disponibilizado com sucesso!', 'success');
+        await saveProduct(formData, null);
       }
 
       navigateTo('admin-produtos');
-      fetchMyProducts();
     } catch (err) {
       console.error(err);
-      showAlert('Erro ao gravar dados do lote promocional.', 'error');
     }
   };
 
