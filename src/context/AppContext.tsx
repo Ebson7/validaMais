@@ -111,6 +111,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Real-time synchronization for 'produtos'
   useEffect(() => {
     setProdutosLoading(true);
+
+    const loadInitialProdutos = async () => {
+      try {
+        const results = await getProducts();
+        setProdutos(results);
+      } catch (error) {
+        console.warn("Direct produtos fetch failed, checking localStorage fallback:", error);
+        const local = localStorage.getItem('validamais_produtos');
+        if (local) {
+          setProdutos(JSON.parse(local));
+        }
+      } finally {
+        setProdutosLoading(false);
+      }
+    };
+    loadInitialProdutos();
+
     const colRef = collection(db, 'produtos');
     const unsubscribe = onSnapshot(
       colRef,
@@ -122,20 +139,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (results.length > 0) {
           setProdutos(results);
           localStorage.setItem('validamais_produtos', JSON.stringify(results));
-        } else {
-          const local = localStorage.getItem('validamais_produtos');
-          if (local) {
-            setProdutos(JSON.parse(local));
-          }
         }
         setProdutosLoading(false);
       },
       (error) => {
-        console.warn("Real-time produtos snapshot subscription failed: ", error);
-        const local = localStorage.getItem('validamais_produtos');
-        if (local) {
-          setProdutos(JSON.parse(local));
-        }
+        console.warn("Real-time snapshot products subscription failed (normal if offline): ", error);
         setProdutosLoading(false);
       }
     );
@@ -145,6 +153,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Real-time synchronization for 'reservas'
   useEffect(() => {
     setReservasLoading(true);
+
+    const loadInitialReservas = async () => {
+      try {
+        const results = await dbGetReservations();
+        setReservas(results);
+      } catch (error) {
+        console.warn("Direct reservas fetch failed, checking localStorage fallback:", error);
+        const local = localStorage.getItem('validamais_reservas');
+        if (local) {
+          setReservas(JSON.parse(local));
+        }
+      } finally {
+        setReservasLoading(false);
+      }
+    };
+    loadInitialReservas();
+
     const colRef = collection(db, 'reservas');
     const unsubscribe = onSnapshot(
       colRef,
@@ -158,11 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setReservasLoading(false);
       },
       (error) => {
-        console.warn("Real-time reservas snapshot subscription failed: ", error);
-        const local = localStorage.getItem('validamais_reservas');
-        if (local) {
-          setReservas(JSON.parse(local));
-        }
+        console.warn("Real-time snapshot reservations subscription failed (normal if offline): ", error);
         setReservasLoading(false);
       }
     );
@@ -226,8 +247,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Authenticated state listener
+  // Authenticated state listener with safe loader fallback
   useEffect(() => {
+    // 1. Core listener on Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
@@ -251,17 +273,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.warn("Could not load user profile from Firestore, keeping local session if any.", error);
         }
       } else {
-        // If google firebase logs out, we only log out locally if we were not in a robust offline-session
+        // If google firebase logs out, we only log out locally if we were not in a robust offline-session (supports mock_ and sim_ tokens)
         const localSession = localStorage.getItem('validamais_currentUser');
-        const isMockSession = localSession && JSON.parse(localSession).uid.startsWith('mock_');
-        if (!isMockSession) {
+        if (localSession) {
+          try {
+            const parsed = JSON.parse(localSession);
+            const isMockOrSimulated = parsed.uid && (parsed.uid.startsWith('mock_') || parsed.uid.startsWith('sim_'));
+            if (!isMockOrSimulated) {
+              setUser(null);
+            }
+          } catch (e) {
+            setUser(null);
+          }
+        } else {
           setUser(null);
         }
       }
       setLoading(false);
     });
 
-    return unsubscribe;
+    // 2. Guaranteed Boot Fallback: sets loading to false anyway after 1800ms
+    const fallbackTimer = setTimeout(() => {
+      setLoading(false);
+    }, 1800);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(fallbackTimer);
+    };
   }, []);
 
   // Login handler
